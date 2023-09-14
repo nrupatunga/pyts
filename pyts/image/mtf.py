@@ -194,7 +194,9 @@ class MarkovTransitionField(BaseEstimator, UnivariateTransformerMixin):
             raise TypeError("'n_bins' must be an integer.")
         if not self.n_bins >= 2:
             raise ValueError("'n_bins' must be greater than or equal to 2.")
-        if self.strategy not in ['uniform', 'quantile', 'normal']:
+        print(self.strategy)
+        if self.strategy not in ['uniform', 'quantile', 'normal',
+                                 'custom']:
             raise ValueError("'strategy' must be 'uniform', 'quantile' or "
                              "'normal'.")
         return image_size

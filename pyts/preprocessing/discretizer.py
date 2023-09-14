@@ -3,13 +3,15 @@
 # Author: Johann Faouzi <johann.faouzi@gmail.com>
 # License: BSD-3-Clause
 
+from warnings import warn
+
 import numpy as np
 from numba import njit, prange
 from numba.typed import List
 from scipy.stats import norm
 from sklearn.base import BaseEstimator
 from sklearn.utils.validation import check_array
-from warnings import warn
+
 from ..base import UnivariateTransformerMixin
 
 
@@ -89,10 +91,11 @@ class KBinsDiscretizer(BaseEstimator, UnivariateTransformerMixin):
 
     """
 
-    def __init__(self, n_bins=5, strategy='quantile', raise_warning=True):
+    def __init__(self, n_bins=5, strategy='quantile', custom_th=-1, raise_warning=True):
         self.n_bins = n_bins
         self.strategy = strategy
         self.raise_warning = raise_warning
+        self.custom_th = custom_th
 
     def fit(self, X=None, y=None):
         """Pass.
@@ -131,7 +134,7 @@ class KBinsDiscretizer(BaseEstimator, UnivariateTransformerMixin):
         self._check_params(n_timestamps)
 
         bin_edges = self._compute_bins(
-            X, n_samples, self.n_bins, self.strategy)
+            X, n_samples, self.n_bins, self.strategy, self.custom_th)
         X_new = _digitize(X, bin_edges)
         return X_new
 
@@ -143,17 +146,35 @@ class KBinsDiscretizer(BaseEstimator, UnivariateTransformerMixin):
                 "'n_bins' must be greater than or equal to 2 (got {0})."
                 .format(self.n_bins)
             )
-        if self.strategy not in ['uniform', 'quantile', 'normal']:
+        if self.strategy not in ['uniform', 'quantile', 'normal',
+                                 'custom']:
             raise ValueError("'strategy' must be either 'uniform', 'quantile' "
                              "or 'normal' (got {0}).".format(self.strategy))
 
-    def _compute_bins(self, X, n_samples, n_bins, strategy):
+    def _find_max(self, df):
+        df_c = np.copy(df)
+        df_c[df_c == 12] = -1
+        return df_c.max()
+
+    def _compute_bins(self, X, n_samples, n_bins, strategy,
+                      custom_th: float = -1):
         if strategy == 'normal':
             bin_edges = norm.ppf(np.linspace(0, 1, self.n_bins + 1)[1:-1])
         elif strategy == 'uniform':
             sample_min, sample_max = np.min(X, axis=1), np.max(X, axis=1)
             bin_edges = _uniform_bins(
                 sample_min, sample_max, n_samples, n_bins).T
+        elif strategy == 'custom':
+            # bin_edges = np.asarray([0.165, 0.2, 0.25, 0.35, 0.5])
+            # bin_edges = np.asarray([3.75, 6, 10])
+            if custom_th <= 0:
+                max_x = self._find_max(X)
+            else:
+                max_x = custom_th
+            bin_edges = np.asarray([0.35 * max_x,
+                                    0.6 * max_x,
+                                    0.9 * max_x])
+            bin_edges = np.reshape(bin_edges, (1, -1))
         else:
             bin_edges = np.percentile(
                 X, np.linspace(0, 100, self.n_bins + 1)[1:-1], axis=1
